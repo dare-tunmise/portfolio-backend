@@ -26,13 +26,26 @@ app.use((req, res, next) => {
 });
 
 // Session configuration - MUST come before passport
+// app.use(session({
+//   secret: process.env.SESSION_SECRET,
+//   resave: false,
+//   saveUninitialized: false,
+//   cookie: {
+//     secure: process.env.NODE_ENV === 'production',
+//     maxAge: 24 * 60 * 60 * 1000 // 24 hours
+//   }
+// }));
+
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true, // Add this - important for Render
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    secure: true, // Always true in production
+    sameSite: 'none', // Required for cross-domain
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
