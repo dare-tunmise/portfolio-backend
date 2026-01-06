@@ -12,7 +12,7 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: [process.env.FRONTEND_URL, 'http://localhost:3000','http://localhost:3000/', 'https://daretunmise.com', 'https://www.daretunmise.com'],
+  origin: [process.env.FRONTEND_URL, 'http://localhost:3000','http://localhost:3000/', 'https://daretunmisee.onrender.com', 'https://daretunmise.com', 'https://www.daretunmise.com'],
   credentials: true
 }));
 
