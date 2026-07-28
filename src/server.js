@@ -9,11 +9,23 @@ const app = express();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Every origin allowed to call the API with credentials: the configured
+// frontend, both apex and www (they are separate origins to a browser), the
+// Render URL, and localhost for development.
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL,
+  'https://www.daretunmise.com',
+  'https://daretunmise.com',
+  'https://daretunmisee.onrender.com',
+  'http://localhost:3000',
+].filter(Boolean);
+
 // The frontend and API live on different hosts, so the session cookie is
 // cross-site. Browsers only send a SameSite=None cookie when it is also
 // Secure, and Secure cookies are dropped over plain http (localhost dev).
 // Key both flags off the frontend's actual protocol so dev and prod work
-// without editing code.
+// without editing code — hardcoding secure:true breaks local login, and
+// hardcoding false breaks production.
 const isSecureFrontend = FRONTEND_URL.startsWith('https://');
 
 // Connect to MongoDB
@@ -27,7 +39,7 @@ if (isSecureFrontend) {
 
 // Middleware
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: ALLOWED_ORIGINS,
   credentials: true
 }));
 
@@ -45,6 +57,7 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true, // Trust X-Forwarded-Proto behind Render's TLS-terminating proxy
   cookie: {
     secure: isSecureFrontend,
     sameSite: isSecureFrontend ? 'none' : 'lax',
