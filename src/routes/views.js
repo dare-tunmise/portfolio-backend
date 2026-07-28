@@ -30,7 +30,6 @@ const captureRequest = (req) => ({
   ip: clientIp(req),
   userAgent: req.get('user-agent') || '',
   referrer: req.body?.referrer || req.get('referer') || '',
-  host: req.hostname,
   headerCountry: req.get('cf-ipcountry') || req.get('x-vercel-ip-country') || '',
 });
 
@@ -61,7 +60,7 @@ router.post('/', async (req, res) => {
         visitorHash: hash,
         bucket: Math.floor(Date.now() / REFRESH_WINDOW_MS),
         country: await lookupCountry(ctx.ip, ctx.headerCountry),
-        referrer: referrerHost(ctx.referrer, ctx.host),
+        referrer: referrerHost(ctx.referrer),
         device: deviceType(ctx.userAgent),
       });
     } catch (error) {

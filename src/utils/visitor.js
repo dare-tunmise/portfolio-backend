@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const geoip = require('fast-geoip');
+const { isOwnHost, normalizeHost } = require('../config/origins');
 
 /**
  * Visitor fingerprinting for analytics, without retaining personal data.
@@ -48,15 +49,19 @@ const deviceType = (userAgent = '') => {
   return 'desktop';
 };
 
-/** Reduce a referrer URL to a bare host — no paths, no query strings. */
-const referrerHost = (referrer, selfHost) => {
+/**
+ * Reduce a referrer URL to a bare host — no paths, no query strings.
+ *
+ * Anything on one of our own origins is internal navigation. Checked against
+ * the shared origin list rather than the request's hostname: this API runs on a
+ * different host from the site, so req.hostname never matches the frontend and
+ * every internal click would be logged as an external referrer.
+ */
+const referrerHost = (referrer) => {
   if (!referrer) return 'direct';
   try {
-    const host = new URL(referrer).hostname.replace(/^www\./, '');
-    if (selfHost && host === String(selfHost).replace(/^www\./, '')) {
-      return 'internal';
-    }
-    return host;
+    const host = normalizeHost(new URL(referrer).hostname);
+    return isOwnHost(host) ? 'internal' : host;
   } catch {
     return 'direct';
   }
