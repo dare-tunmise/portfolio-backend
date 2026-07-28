@@ -7,17 +7,42 @@ const connectDB = require('./config/database');
 
 const app = express();
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+// Every origin allowed to call the API with credentials: the configured
+// frontend, both apex and www (they are separate origins to a browser), the
+// Render URL, and localhost for development.
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL,
+  'https://www.daretunmise.com',
+  'https://daretunmise.com',
+  'https://daretunmisee.onrender.com',
+  'http://localhost:3000',
+].filter(Boolean);
+
+// The frontend and API live on different hosts, so the session cookie is
+// cross-site. Browsers only send a SameSite=None cookie when it is also
+// Secure, and Secure cookies are dropped over plain http (localhost dev).
+// Key both flags off the frontend's actual protocol so dev and prod work
+// without editing code — hardcoding secure:true breaks local login, and
+// hardcoding false breaks production.
+const isSecureFrontend = FRONTEND_URL.startsWith('https://');
+
 // Connect to MongoDB
 connectDB();
 
+// Render (and most PaaS) terminate TLS at a proxy, so Express needs to trust
+// X-Forwarded-Proto or it will refuse to set a Secure cookie.
+if (isSecureFrontend) {
+  app.set('trust proxy', 1);
+}
+
 // Middleware
 app.use(cors({
-  origin: [process.env.FRONTEND_URL, 'http://localhost:3000','http://localhost:3000/', 'https://daretunmisee.onrender.com', 'https://daretunmise.com', 'https://www.daretunmise.com'],
+  origin: ALLOWED_ORIGINS,
   credentials: true
 }));
 
-// app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -28,26 +53,16 @@ app.use((req, res, next) => {
 });
 
 // Session configuration - MUST come before passport
-// app.use(session({
-//   secret: process.env.SESSION_SECRET,
-//   resave: false,
-//   saveUninitialized: false,
-//   cookie: {
-//     secure: process.env.NODE_ENV === 'production',
-//     maxAge: 24 * 60 * 60 * 1000 // 24 hours
-//   }
-// }));
-
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  proxy: true, // Add this - important for Render
+  proxy: true, // Trust X-Forwarded-Proto behind Render's TLS-terminating proxy
   cookie: {
-    secure: true, // Always true in production
-    sameSite: 'none', // Required for cross-domain
+    secure: isSecureFrontend,
+    sameSite: isSecureFrontend ? 'none' : 'lax',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
 
@@ -62,10 +77,16 @@ require('./config/passport');
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blogs');
 const dashboardRoutes = require('./routes/dashboard');
+const viewRoutes = require('./routes/views');
+const analyticsRoutes = require('./routes/analytics');
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/views', viewRoutes);
+// More specific mount first, so it doesn't fall through the /api/dashboard
+// router (and run isAuthenticated twice) on the way here.
+app.use('/api/dashboard/analytics', analyticsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
