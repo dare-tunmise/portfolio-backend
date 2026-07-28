@@ -7,12 +7,27 @@ const connectDB = require('./config/database');
 
 const app = express();
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+// The frontend and API live on different hosts, so the session cookie is
+// cross-site. Browsers only send a SameSite=None cookie when it is also
+// Secure, and Secure cookies are dropped over plain http (localhost dev).
+// Key both flags off the frontend's actual protocol so dev and prod work
+// without editing code.
+const isSecureFrontend = FRONTEND_URL.startsWith('https://');
+
 // Connect to MongoDB
 connectDB();
 
+// Render (and most PaaS) terminate TLS at a proxy, so Express needs to trust
+// X-Forwarded-Proto or it will refuse to set a Secure cookie.
+if (isSecureFrontend) {
+  app.set('trust proxy', 1);
+}
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:8084',
+  origin: FRONTEND_URL,
   credentials: true
 }));
 
@@ -31,7 +46,9 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureFrontend,
+    sameSite: isSecureFrontend ? 'none' : 'lax',
+    httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
@@ -47,10 +64,16 @@ require('./config/passport');
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blogs');
 const dashboardRoutes = require('./routes/dashboard');
+const viewRoutes = require('./routes/views');
+const analyticsRoutes = require('./routes/analytics');
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/views', viewRoutes);
+// More specific mount first, so it doesn't fall through the /api/dashboard
+// router (and run isAuthenticated twice) on the way here.
+app.use('/api/dashboard/analytics', analyticsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
