@@ -61,7 +61,29 @@ router.get('/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Blog not found' });
     }
 
-    res.json(blog);
+    // Neighbours for prev/next links, within the same category so essay
+    // navigation never wanders into a project.
+    //
+    // Walks the ordered list rather than comparing dates with $lt/$gt: two posts
+    // can share a date, and a bare date comparison would then skip one or loop
+    // between them. Sorting by (date, _id) is total, and at ~20 posts per
+    // category the extra documents cost nothing.
+    const ordered = await Blog.find({ category: blog.category, published: true })
+      .sort({ date: -1, _id: -1 }) // newest first
+      .select('title slug')
+      .lean();
+
+    const index = ordered.findIndex((p) => p.slug === blog.slug);
+    const neighbour = (i) =>
+      ordered[i] ? { title: ordered[i].title, slug: ordered[i].slug } : null;
+
+    res.json({
+      ...blog,
+      // "previous" is older, "next" is newer. The newest post therefore has no
+      // next, and the oldest has no previous.
+      prev: index === -1 ? null : neighbour(index + 1),
+      next: index === -1 ? null : neighbour(index - 1),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
